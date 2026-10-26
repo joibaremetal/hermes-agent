@@ -99,6 +99,33 @@ class TestFireStreamDeltaEmptiness:
         assert agent._current_streamed_assistant_text == "again"
 
 
+class TestHookOnlyStreams:
+    """A webhook/voice turn has no display callback, only plugin stream hooks:
+    nothing is recorded as delivered, but a paragraph break opening a later
+    delta must still reach the hook ("coast.\\n\\nAnd" was spoken "coast dot And")."""
+
+    def _agent(self):
+        agent = _make_agent()
+        agent.stream_delta_callback = None
+        agent._stream_callback = None
+        hooked = []
+        agent._enqueue_stream_hook = lambda event, **f: hooked.append(f.get("delta"))
+        return agent, hooked
+
+    def test_later_delta_keeps_its_paragraph_break(self):
+        agent, hooked = self._agent()
+        agent._fire_stream_delta("\n\nalong the coast.")
+        agent._fire_stream_delta("\n\nAnd no wonder")
+        assert hooked == ["along the coast.", "\n\nAnd no wonder"]
+
+    def test_new_response_strips_again(self):
+        agent, hooked = self._agent()
+        agent._fire_stream_delta("hello")
+        agent._reset_stream_delivery_tracking()
+        agent._fire_stream_delta("\n\nagain")
+        assert hooked[-1] == "again"
+
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
